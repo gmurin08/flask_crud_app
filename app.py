@@ -7,7 +7,7 @@ app.config['SECRET_KEY'] = 'dfewfew123213rwdsgert34tgfd1234trgf'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///paws.db'
 db = SQLAlchemy(app)
 
-
+"""Information regarding pets in the system."""
 pets = [
     {"id": 1, "name": "Nelly", "age": "5 weeks", "bio": "I am a tiny kitten rescued by the good people at Paws "
                                                         "Rescue Center. I love squeaky toys and cuddles."},
@@ -17,8 +17,7 @@ pets = [
     {"id": 4, "name": "Mr. Furrkins", "age": "5 years", "bio": "Probably napping."},
 ]
 
-
-"""Information regarding the Users in the System."""
+"""Information regarding the Users in the System"""
 users = [
     {"id": 1, "full_name": "Pet Rescue Team", "email": "team@pawsrescue.co", "password": "adminpass"},
 ]
@@ -44,9 +43,35 @@ class Pet(db.Model):
 
 db.create_all()
 
+# Create 'team' user and add it to session
+team = User(full_name="Pet Rescue Team", email="team@petrescue.co", password="adminpass")
+db.session.add(team)
+
+# Create pet objects and add to the session
+nelly = Pet(name = "Nelly", age = "5 weeks", bio = "I am a tiny kitten rescued by the good people at Paws Rescue "
+                                                   "Center. I love squeaky toys and cuddles.")
+yuki = Pet(name = "Yuki", age = "8 months", bio = "I am a handsome gentle-cat. I like to dress up in bow ties.")
+basker = Pet(name = "Basker", age = "1 year", bio = "I love barking. But, I love my friends more.")
+mrfurrkins = Pet(name = "Mr. Furrkins", age = "5 years", bio = "Probably napping.")
+
+db.session.add(nelly)
+db.session.add(yuki)
+db.session.add(basker)
+db.session.add(mrfurrkins)
+
+
+# Commit changes in the session
+try:
+    db.session.commit()
+except Exception as e:
+    db.session.rollback()
+finally:
+    db.session.close()
+
 
 @app.route("/")
 def homepage():
+    pets = Pet.query.all()
     return render_template("home.html", pets=pets)
 
 
@@ -58,7 +83,7 @@ def about():
 @app.route("/details/<int:pet_id>")
 def pet_details(pet_id):
     """View function for Showing Details of Each Pet."""
-    pet = next((pet for pet in pets if pet["id"] == pet_id), None)
+    pet = Pet.query.get(pet_id)
     if pet is None:
         abort(404, description="No Pet was Found with the given ID")
     return render_template("details.html", pet=pet)
@@ -68,13 +93,11 @@ def pet_details(pet_id):
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        user = next(
-            (user for user in users if user["email"] == form.email.data and user["password"] == form.password.data),
-            None)
+        user = User.query.filter_by(email=form.email.data, password=form.password.data).first
         if user is None:
             return render_template("login.html", form=form, message="Wrong Credentials. Please Try Again.")
         else:
-            session['user'] = user
+            session['user'] = user.id
             return render_template("login.html", message="Successfully Logged In!")
     return render_template("login.html", form=form)
 
@@ -90,9 +113,17 @@ def logout():
 def signup():
     form = SignupForm()
     if form.validate_on_submit():
-        new_user = {"id": len(users) + 1, "full_name": form.full_name.data, "email": form.email.data,
-                    "password": form.password.data}
-        users.append(new_user)
+        new_user = User(full_name=form.full_name, email=form.email)
+        db.session.add(new_user)
+        try:
+            db.session.commit()
+        except Exception as e:
+            print(e)
+            db.session.rollback()
+            return render_template("signup.html", form=form,
+                                   message="This Email already exists in the system! Please Log in instead.")
+        finally:
+            db.session.close()
         return render_template("signup.html", message="Successfully signed up")
     return render_template("signup.html", form=form)
 
